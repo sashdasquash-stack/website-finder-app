@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lead Finder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="lock" class="lock hidden" aria-hidden="true">
+    <div class="lock-card">
+      <h2>Lead Finder</h2>
+      <p>This site is private. Enter the access password to continue.</p>
+      <form id="lock-form" autocomplete="off">
+        <input type="password" id="lock-input" placeholder="Password" autocomplete="current-password" required>
+        <button type="submit">Unlock</button>
+      </form>
+      <p id="lock-error" class="lock-error hidden"></p>
+    </div>
+  </div>
+  <main>
+    <header>
+      <h1>Lead Finder</h1>
+      <p class="tagline">Local businesses without websites — sourced live from Google Maps.</p>
+    </header>
+
+    <form id="search-form" autocomplete="off">
+      <div class="field field-city">
+        <label for="city">City or area</label>
+        <input type="text" id="city" name="city" placeholder="Miami Beach, FL" required>
+      </div>
+      <div class="field field-category">
+        <label for="category">Category</label>
+        <select id="category" name="category" required>
+          <option value="">Loading…</option>
+        </select>
+      </div>
+      <button type="submit" id="search-btn">Search</button>
+    </form>
+
+    <section id="status" class="status hidden" aria-live="polite"></section>
+
+    <section id="results-section" class="hidden">
+      <div class="results-header">
+        <div>
+          <h2 id="results-summary"></h2>
+          <p id="results-meta" class="meta"></p>
+        </div>
+        <div class="results-actions">
+          <label class="toggle">
+            <input type="checkbox" id="hide-contacted">
+            <span>Hide contacted</span>
+          </label>
+          <button id="export-csv" type="button">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="results-table">
+          <thead>
+            <tr>
+              <th class="col-check"><input type="checkbox" id="check-all" title="Select all"></th>
+              <th data-sort="name">Name</th>
+              <th data-sort="rating">Rating</th>
+              <th data-sort="phone">Phone</th>
+              <th data-sort="address">Address</th>
+              <th class="col-verify">Verify</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      <p class="footer-note">Always click <strong>Verify</strong> before reaching out — a business may have launched a website since Google last indexed it.</p>
+      <p class="watermark">Made by <strong>squashprod</strong> · &copy; 2026</p>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+node_modules/
+data/cache/
+data/contacted.json
+.DS_Store
+*.log
+.env
