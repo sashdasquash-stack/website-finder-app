@@ -2,9 +2,9 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const CACHE_FILE = path.join(__dirname, '..', 'data', 'cache', 'geocode.json');
-const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
+const PHOTON_URL = 'https://photon.komoot.io/api/';
 const USER_AGENT = 'LeadFinder/1.0';
-const MIN_REQUEST_INTERVAL_MS = 1000;
+const MIN_REQUEST_INTERVAL_MS = 200;
 
 let cache = null;
 let lastRequestTime = 0;
@@ -47,6 +47,14 @@ async function rateLimitedFetch(url) {
   return task;
 }
 
+function buildDisplayName(props) {
+  const parts = [props.name];
+  if (props.city && props.city !== props.name) parts.push(props.city);
+  if (props.state) parts.push(props.state);
+  if (props.country) parts.push(props.country);
+  return parts.filter(Boolean).join(', ');
+}
+
 async function geocode(query) {
   const key = normalizeQuery(query);
   if (!key) throw new Error('Empty geocode query');
@@ -54,25 +62,27 @@ async function geocode(query) {
   const c = await loadCache();
   if (c[key]) return c[key];
 
-  const url = `${NOMINATIM_URL}?q=${encodeURIComponent(query)}&format=json&limit=1`;
+  const url = `${PHOTON_URL}?q=${encodeURIComponent(query)}&limit=1`;
   const res = await rateLimitedFetch(url);
   if (!res.ok) {
-    throw new Error(`Nominatim error: ${res.status} ${res.statusText}`);
+    throw new Error(`Geocoder error: ${res.status} ${res.statusText}`);
   }
 
-  const results = await res.json();
-  if (!Array.isArray(results) || results.length === 0) {
+  const data = await res.json();
+  const features = data.features || [];
+  if (features.length === 0) {
     throw new Error(`Could not find "${query}". Try a more specific name (e.g. "Miami Beach, FL, USA").`);
   }
 
-  const r = results[0];
-  const [south, north, west, east] = r.boundingbox.map(Number);
+  const f = features[0];
+  const [lon, lat] = f.geometry.coordinates;
+  const props = f.properties || {};
+
   const result = {
     query,
-    displayName: r.display_name,
-    bbox: { south, north, west, east },
-    lat: Number(r.lat),
-    lon: Number(r.lon),
+    displayName: buildDisplayName(props),
+    lat,
+    lon,
   };
 
   c[key] = result;
