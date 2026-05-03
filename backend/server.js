@@ -53,9 +53,9 @@ async function searchOneCity(apiKey, city, category) {
   return { displayName: loc.displayName, ...search };
 }
 
-async function handleCitySearch(apiKey, city, category) {
+async function handleCitySearch(apiKey, city, category, force = false) {
   const cacheKey = cache.buildKey('gmaps', city.trim().toLowerCase(), category.key);
-  const cached = await cache.get(cacheKey);
+  const cached = force ? null : await cache.get(cacheKey);
   if (cached) {
     return {
       results: cached.data.results,
@@ -86,9 +86,9 @@ async function handleCitySearch(apiKey, city, category) {
   };
 }
 
-async function handleStateSearch(apiKey, state, category) {
+async function handleStateSearch(apiKey, state, category, force = false) {
   const cacheKey = cache.buildKey('gmaps-state', state.abbr, category.key);
-  const cached = await cache.get(cacheKey);
+  const cached = force ? null : await cache.get(cacheKey);
   if (cached) {
     return {
       results: cached.data.results,
@@ -152,7 +152,7 @@ async function handleStateSearch(apiKey, state, category) {
 
 app.post('/api/search', requireSerpKey, async (req, res) => {
   try {
-    const { city, category: categoryKey } = req.body || {};
+    const { city, category: categoryKey, force } = req.body || {};
     if (!city || !categoryKey) {
       return res.status(400).json({ error: 'Both "city" and "category" are required.' });
     }
@@ -160,8 +160,8 @@ app.post('/api/search', requireSerpKey, async (req, res) => {
     const category = getCategory(categoryKey);
     const state = detectState(city);
     const result = state
-      ? await handleStateSearch(req.serpApiKey, state, category)
-      : await handleCitySearch(req.serpApiKey, city, category);
+      ? await handleStateSearch(req.serpApiKey, state, category, Boolean(force))
+      : await handleCitySearch(req.serpApiKey, city, category, Boolean(force));
 
     res.json(result);
   } catch (err) {

@@ -7,6 +7,8 @@ const els = {
   resultsSection: document.getElementById('results-section'),
   resultsSummary: document.getElementById('results-summary'),
   resultsMeta: document.getElementById('results-meta'),
+  resultsMetaText: document.getElementById('results-meta-text'),
+  refreshBtn: document.getElementById('refresh-btn'),
   resultsTable: document.getElementById('results-table'),
   resultsBody: document.querySelector('#results-table tbody'),
   exportBtn: document.getElementById('export-csv'),
@@ -214,7 +216,7 @@ function renderSummary(meta, results, stats) {
   const cityScope = meta.multiCity && meta.citiesSearched
     ? `${meta.city} · ${meta.citiesSearched.length} cities (${meta.citiesSearched.join(', ')})`
     : meta.city;
-  els.resultsMeta.textContent = `${cityScope}${radiusNote} · ${meta.cache}${droppedNote}`;
+  els.resultsMetaText.textContent = `${cityScope}${radiusNote} · ${meta.cache}${droppedNote}`;
 }
 
 function applySort(col) {
@@ -239,16 +241,17 @@ function applySort(col) {
   renderResults(sorted);
 }
 
-async function performSearch(city, categoryKey) {
-  setStatus('loading', `Searching for leads in ${city}…`);
+async function performSearch(city, categoryKey, { force = false } = {}) {
+  setStatus('loading', `${force ? 'Refreshing' : 'Searching for leads in'} ${city}…`);
   els.searchBtn.disabled = true;
-  els.resultsSection.classList.add('hidden');
+  if (els.refreshBtn) els.refreshBtn.disabled = true;
+  if (!force) els.resultsSection.classList.add('hidden');
 
   try {
     const res = await authFetch('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ city, category: categoryKey }),
+      body: JSON.stringify({ city, category: categoryKey, force }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `Search failed (HTTP ${res.status})`);
@@ -269,6 +272,7 @@ async function performSearch(city, categoryKey) {
     setStatus('error', err.message);
   } finally {
     els.searchBtn.disabled = false;
+    if (els.refreshBtn) els.refreshBtn.disabled = false;
   }
 }
 
@@ -365,6 +369,15 @@ els.form.addEventListener('submit', e => {
 });
 
 els.exportBtn.addEventListener('click', exportCSV);
+
+els.refreshBtn?.addEventListener('click', () => {
+  if (!currentMeta) return;
+  const city = els.city.value.trim() || currentMeta.city;
+  const categoryKey = els.category.value;
+  const cost = currentMeta.multiCity ? currentMeta.citiesSearched?.length || 5 : 1;
+  if (!confirm(`Force a fresh search? This costs ${cost} SerpAPI credit${cost === 1 ? '' : 's'}.`)) return;
+  performSearch(city, categoryKey, { force: true });
+});
 
 function pitchAll() {
   if (!document.body.classList.contains('is-owner')) return;
