@@ -105,6 +105,33 @@ const CATEGORIES = {
   },
 };
 
+const CATEGORY_GROUPS = {
+  'beauty-spa': {
+    name: 'Beauty & spa',
+    categories: ['hair-salons', 'nail-salons', 'massage-spa'],
+  },
+  'trades': {
+    name: 'Trades & contractors',
+    categories: ['plumbers', 'electricians', 'hvac', 'roofers', 'carpenters', 'painters', 'landscapers'],
+  },
+  'health': {
+    name: 'Health & wellness',
+    categories: ['dentists', 'chiropractors', 'veterinarians'],
+  },
+  'food': {
+    name: 'Food & drink',
+    categories: ['restaurants', 'cafes', 'bakeries'],
+  },
+  'auto': {
+    name: 'Auto services',
+    categories: ['auto-repair', 'auto-detailing'],
+  },
+  'all': {
+    name: 'All categories',
+    categories: Object.keys(CATEGORIES),
+  },
+};
+
 function getCategory(key) {
   const cat = CATEGORIES[key];
   if (!cat) {
@@ -113,11 +140,25 @@ function getCategory(key) {
   return { key, ...cat };
 }
 
-function listCategories() {
-  return Object.entries(CATEGORIES).map(([key, { name }]) => ({ key, name }));
+function getCategoryGroup(key) {
+  const group = CATEGORY_GROUPS[key];
+  if (!group) {
+    throw new Error(`Unknown category group "${key}". Valid keys: ${Object.keys(CATEGORY_GROUPS).join(', ')}`);
+  }
+  return { key, ...group };
 }
 
-module.exports = { CATEGORIES, getCategory, listCategories };
+function listCategories() {
+  const groups = Object.entries(CATEGORY_GROUPS).map(([key, { name, categories }]) => ({
+    key: `group:${key}`,
+    name: `${name} (${categories.length})`,
+    isGroup: true,
+  }));
+  const cats = Object.entries(CATEGORIES).map(([key, { name }]) => ({ key, name, isGroup: false }));
+  return [...groups, ...cats];
+}
+
+module.exports = { CATEGORIES, CATEGORY_GROUPS, getCategory, getCategoryGroup, listCategories };
 
 if (require.main === module) {
   const list = listCategories();

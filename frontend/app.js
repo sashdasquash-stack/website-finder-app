@@ -191,11 +191,18 @@ async function loadCategories() {
   const res = await fetch('/api/categories');
   if (!res.ok) throw new Error('Could not load categories');
   const { categories } = await res.json();
+  const groups = categories.filter(c => c.isGroup);
+  const cats = categories.filter(c => !c.isGroup);
+  const groupOptions = groups
+    .map(c => `<option value="${escapeAttr(c.key)}">⚡ ${escapeHtml(c.name)}</option>`)
+    .join('');
+  const catOptions = cats
+    .map(c => `<option value="${escapeAttr(c.key)}">${escapeHtml(c.name)}</option>`)
+    .join('');
   els.category.innerHTML =
     '<option value="">Select a category…</option>' +
-    categories
-      .map(c => `<option value="${escapeAttr(c.key)}">${escapeHtml(c.name)}</option>`)
-      .join('');
+    (groups.length ? `<optgroup label="Bundles (multi-category)">${groupOptions}</optgroup>` : '') +
+    (cats.length ? `<optgroup label="Single category">${catOptions}</optgroup>` : '');
 }
 
 function setStatus(type, message) {
@@ -493,11 +500,54 @@ els.hideContacted.addEventListener('change', () => {
   els.resultsTable.classList.toggle('hide-contacted', els.hideContacted.checked);
 });
 
+const STATE_NAMES_LOWER = new Set([
+  'al','alabama','ak','alaska','az','arizona','ar','arkansas','ca','california','co','colorado',
+  'ct','connecticut','de','delaware','fl','florida','ga','georgia','hi','hawaii','id','idaho',
+  'il','illinois','in','indiana','ia','iowa','ks','kansas','ky','kentucky','la','louisiana',
+  'me','maine','md','maryland','ma','massachusetts','mi','michigan','mn','minnesota','ms','mississippi',
+  'mo','missouri','mt','montana','ne','nebraska','nv','nevada','nh','new hampshire','nj','new jersey',
+  'nm','new mexico','ny','new york','nc','north carolina','nd','north dakota','oh','ohio',
+  'ok','oklahoma','or','oregon','pa','pennsylvania','ri','rhode island','sc','south carolina',
+  'sd','south dakota','tn','tennessee','tx','texas','ut','utah','vt','vermont','va','virginia',
+  'wa','washington','wv','west virginia','wi','wisconsin','wy','wyoming','dc',
+]);
+
+function looksLikeState(city) {
+  const cleaned = city.trim().toLowerCase()
+    .replace(/,?\s*(usa|us|united states)$/i, '')
+    .replace(/\s+state$/i, '')
+    .trim();
+  return STATE_NAMES_LOWER.has(cleaned);
+}
+
+function getGroupSize(categoryKey) {
+  const opt = els.category.querySelector(`option[value="${categoryKey}"]`);
+  if (!opt) return 1;
+  const match = opt.textContent.match(/\((\d+)\)/);
+  return match ? parseInt(match[1], 10) : 1;
+}
+
 els.form.addEventListener('submit', e => {
   e.preventDefault();
   const city = els.city.value.trim();
   const categoryKey = els.category.value;
   if (!city || !categoryKey) return;
+
+  if (categoryKey.startsWith('group:')) {
+    const groupSize = getGroupSize(categoryKey);
+    const cityMultiplier = looksLikeState(city) ? 5 : 1;
+    const credits = groupSize * cityMultiplier;
+    if (credits >= 5) {
+      const ok = confirm(
+        `This bundle searches ${groupSize} categor${groupSize === 1 ? 'y' : 'ies'}` +
+        `${cityMultiplier > 1 ? ' across 5 cities' : ''}.\n\n` +
+        `Estimated cost: ${credits} SerpAPI credit${credits === 1 ? '' : 's'} (out of your 100/mo).\n\n` +
+        `Continue?`
+      );
+      if (!ok) return;
+    }
+  }
+
   performSearch(city, categoryKey);
 });
 

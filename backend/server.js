@@ -2,7 +2,7 @@ require('dotenv').config({ quiet: true });
 
 const express = require('express');
 const path = require('path');
-const { listCategories, getCategory } = require('./categories');
+const { listCategories, getCategory, getCategoryGroup } = require('./categories');
 const { geocode } = require('./geocode');
 const { searchAndNormalize, validateApiKey, SerpApiError } = require('./serpapi');
 const { detectState } = require('./states');
@@ -150,6 +150,85 @@ async function handleStateSearch(apiKey, state, category, force = false) {
   };
 }
 
+async function handleGroupSearch(apiKey, city, group, force) {
+  const state = detectState(city);
+  const cacheScope = state ? 'gmaps-state-group' : 'gmaps-group';
+  const cacheCity = state ? state.abbr : city.trim().toLowerCase();
+  const cacheKey = cache.buildKey(cacheScope, cacheCity, group.key);
+
+  if (!force) {
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return {
+        results: cached.data.results,
+        stats: cached.data.stats,
+        meta: {
+          city: cached.data.displayCity || (state ? state.name : city),
+          cache: `cache (${Math.round(cached.ageMs / 1000)}s old)`,
+          category: group.name,
+          source: 'Google Maps (via SerpAPI)',
+          multiCategory: true,
+          categoriesSearched: cached.data.categoriesSearched,
+          ...(cached.data.citiesSearched ? { multiCity: true, citiesSearched: cached.data.citiesSearched } : {}),
+        },
+      };
+    }
+  }
+
+  const allResults = [];
+  const seen = new Set();
+  const totalStats = { total: 0, dropped_has_website: 0, dropped_no_name: 0, dropped_unreachable: 0, dropped_dupe: 0 };
+  const categoriesSearched = [];
+  let citiesSearched;
+  let displayCity;
+
+  for (const catKey of group.categories) {
+    try {
+      const category = getCategory(catKey);
+      const sub = state
+        ? await handleStateSearch(apiKey, state, category, force)
+        : await handleCitySearch(apiKey, city, category, force);
+      for (const r of sub.results) {
+        if (seen.has(r.id)) {
+          totalStats.dropped_dupe++;
+          continue;
+        }
+        seen.add(r.id);
+        allResults.push(r);
+      }
+      totalStats.total += sub.stats.total;
+      totalStats.dropped_has_website += sub.stats.dropped_has_website;
+      totalStats.dropped_no_name += sub.stats.dropped_no_name;
+      totalStats.dropped_unreachable += sub.stats.dropped_unreachable;
+      categoriesSearched.push(category.name);
+      if (sub.meta.citiesSearched) citiesSearched = sub.meta.citiesSearched;
+      if (sub.meta.city) displayCity = sub.meta.city;
+    } catch (err) {
+      console.error(`Group search: failed for ${catKey}: ${err.message}`);
+    }
+  }
+
+  if (categoriesSearched.length === 0) {
+    throw new Error(`Could not find any results for ${group.name} in ${state ? state.name : city}.`);
+  }
+
+  await cache.set(cacheKey, { results: allResults, stats: totalStats, categoriesSearched, citiesSearched, displayCity });
+
+  return {
+    results: allResults,
+    stats: totalStats,
+    meta: {
+      city: displayCity || (state ? state.name : city),
+      cache: 'fresh',
+      category: group.name,
+      source: 'Google Maps (via SerpAPI)',
+      multiCategory: true,
+      categoriesSearched,
+      ...(citiesSearched ? { multiCity: true, citiesSearched } : {}),
+    },
+  };
+}
+
 app.post('/api/search', requireSerpKey, async (req, res) => {
   try {
     const { city, category: categoryKey, force } = req.body || {};
@@ -157,11 +236,17 @@ app.post('/api/search', requireSerpKey, async (req, res) => {
       return res.status(400).json({ error: 'Both "city" and "category" are required.' });
     }
 
-    const category = getCategory(categoryKey);
-    const state = detectState(city);
-    const result = state
-      ? await handleStateSearch(req.serpApiKey, state, category, Boolean(force))
-      : await handleCitySearch(req.serpApiKey, city, category, Boolean(force));
+    let result;
+    if (categoryKey.startsWith('group:')) {
+      const group = getCategoryGroup(categoryKey.slice(6));
+      result = await handleGroupSearch(req.serpApiKey, city, group, Boolean(force));
+    } else {
+      const category = getCategory(categoryKey);
+      const state = detectState(city);
+      result = state
+        ? await handleStateSearch(req.serpApiKey, state, category, Boolean(force))
+        : await handleCitySearch(req.serpApiKey, city, category, Boolean(force));
+    }
 
     res.json(result);
   } catch (err) {
