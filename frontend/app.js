@@ -164,26 +164,54 @@ function updateSavedCount() {
   }
 }
 
-function renderSavedView(lastSearchLabel = null, justAdded = 0) {
-  document.body.classList.add('saved-mode');
+let lastSearch = null;
+
+function isSavedMode() {
+  return document.body.classList.contains('saved-mode');
+}
+
+function applySavedMode(active) {
+  document.body.classList.toggle('saved-mode', active);
   if (els.savedTab) {
-    els.savedTab.classList.add('active');
-    els.savedTab.setAttribute('aria-pressed', 'true');
+    els.savedTab.classList.toggle('active', active);
+    els.savedTab.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
+  if (els.refreshBtn) els.refreshBtn.style.display = active ? 'none' : '';
+}
+
+function showSavedView() {
+  applySavedMode(true);
   currentResults = [...savedMap.values()];
-  const cacheNote = lastSearchLabel
-    ? `${justAdded} new from "${lastSearchLabel}" · stored locally`
-    : 'stored locally';
   currentMeta = {
     city: 'Your saved leads',
-    cache: cacheNote,
+    cache: 'stored locally',
     category: 'all categories',
   };
   lastStats = { total: currentResults.length, dropped_has_website: 0, dropped_no_name: 0, dropped_unreachable: 0, dropped_dupe: 0 };
-  if (els.refreshBtn) els.refreshBtn.style.display = 'none';
   renderSummary(currentMeta, currentResults, lastStats);
   renderResults(currentResults);
   els.resultsSection.classList.remove('hidden');
+}
+
+function showSearchView(data) {
+  applySavedMode(false);
+  currentResults = data.results;
+  currentMeta = data.meta;
+  lastStats = data.stats;
+  currentSort = { col: null, dir: 'asc' };
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.classList.remove('sorted-asc', 'sorted-desc');
+  });
+  renderSummary(data.meta, data.results, data.stats);
+  renderResults(data.results);
+  els.resultsSection.classList.remove('hidden');
+}
+
+function hideResults() {
+  applySavedMode(false);
+  currentResults = [];
+  currentMeta = null;
+  els.resultsSection.classList.add('hidden');
 }
 
 function toggleSaved(id) {
@@ -331,19 +359,17 @@ async function performSearch(city, categoryKey, { force = false } = {}) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `Search failed (HTTP ${res.status})`);
 
-    let newlySaved = 0;
     for (const r of data.results) {
-      if (!savedMap.has(r.id)) newlySaved++;
       savedMap.set(r.id, r);
     }
-    if (newlySaved > 0) saveSavedToStorage();
-    currentSort = { col: null, dir: 'asc' };
-    document.querySelectorAll('th[data-sort]').forEach(th => {
-      th.classList.remove('sorted-asc', 'sorted-desc');
-    });
+    saveSavedToStorage();
 
-    const searchLabel = `${city} · ${data.meta?.category || categoryKey}`;
-    renderSavedView(searchLabel, newlySaved);
+    lastSearch = data;
+    if (isSavedMode()) {
+      showSavedView();
+    } else {
+      showSearchView(data);
+    }
     setStatus(null);
   } catch (err) {
     setStatus('error', err.message);
@@ -433,6 +459,15 @@ els.resultsBody.addEventListener('click', (e) => {
   btn.setAttribute('title', isSaved ? 'Unsave' : 'Save for later');
 });
 
+els.savedTab?.addEventListener('click', () => {
+  if (isSavedMode()) {
+    if (lastSearch) showSearchView(lastSearch);
+    else hideResults();
+  } else {
+    showSavedView();
+  }
+});
+
 els.resetSaved?.addEventListener('click', () => {
   if (savedMap.size === 0) {
     setStatus('error', 'Nothing to reset — your saved list is already empty.');
@@ -444,7 +479,7 @@ els.resetSaved?.addEventListener('click', () => {
   if (!ok) return;
   savedMap.clear();
   saveSavedToStorage();
-  renderSavedView();
+  if (isSavedMode()) showSavedView();
 });
 
 els.checkAll.addEventListener('change', async () => {
@@ -562,5 +597,4 @@ updateSavedCount();
 (async () => {
   await checkAuthSilently();
   await loadCategories().catch(err => setStatus('error', err.message));
-  renderSavedView();
 })();
