@@ -321,10 +321,43 @@ th.col-check, td.col-check {
   padding-right: 0;
 }
 
+th.col-save, td.col-save {
+  width: 72px;
+  text-align: center;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
 th.col-verify, td.col-verify {
   width: 130px;
   text-align: right;
   padding-right: 1.5rem;
+}
+
+.save-btn {
+  background: transparent;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--border-strong);
+  transition: color 0.15s ease, transform 0.08s ease;
+  height: auto;
+  width: auto;
+  font-family: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: transparent;
+  color: #e8a417;
+  transform: scale(1.15);
+}
+
+.save-btn.saved {
+  color: #e8a417;
 }
 
 td {
@@ -586,6 +619,8 @@ footer p { margin: 0; }
   }
 
   th.col-check, td.col-check { width: 26px; padding-left: 0.35rem; }
+  th.col-save, td.col-save { width: 38px; padding-left: 0.2rem; padding-right: 0.2rem; }
+  .save-btn { font-size: 1rem; padding: 0.15rem 0.3rem; }
   th.col-verify, td.col-verify { width: 54px; padding-right: 0.4rem; }
 
   th[data-sort="rating"], td.col-rating,

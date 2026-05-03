@@ -14,6 +14,7 @@ const els = {
   exportBtn: document.getElementById('export-csv'),
   checkAll: document.getElementById('check-all'),
   hideContacted: document.getElementById('hide-contacted'),
+  showSaved: document.getElementById('show-saved'),
   pitchAll: document.getElementById('pitch-all'),
   lock: document.getElementById('lock'),
   lockForm: document.getElementById('lock-form'),
@@ -23,6 +24,7 @@ const els = {
 
 const SERP_KEY = 'lead_finder_serpapi_key';
 const CONTACTED_KEY = 'lead_finder_contacted';
+const SAVED_KEY = 'lead_finder_saved';
 const OWNER_HASH = '9c6a0aebb2cc42f62ac1c364eef957d42c295ffd2417ec58cc9204d2655c9925';
 const PITCH_MESSAGE = "hey! i saw you guys dont have a website! im a pro builder, and im willing to help. reach out to me for more info!";
 
@@ -134,7 +136,37 @@ els.lockForm.addEventListener('submit', async (e) => {
 let currentResults = [];
 let currentMeta = null;
 let currentSort = { col: null, dir: 'asc' };
+let searchSnapshot = null;
 const contactedSet = new Set();
+const savedMap = new Map();
+
+function loadSavedFromStorage() {
+  savedMap.clear();
+  try {
+    const arr = JSON.parse(localStorage.getItem(SAVED_KEY) || '[]');
+    for (const lead of arr) {
+      if (lead && lead.id) savedMap.set(lead.id, lead);
+    }
+  } catch {
+    // ignore corrupted storage
+  }
+}
+
+function saveSavedToStorage() {
+  localStorage.setItem(SAVED_KEY, JSON.stringify([...savedMap.values()]));
+}
+
+function toggleSaved(id) {
+  if (savedMap.has(id)) {
+    savedMap.delete(id);
+  } else {
+    const lead = currentResults.find(r => r.id === id);
+    if (!lead) return false;
+    savedMap.set(id, lead);
+  }
+  saveSavedToStorage();
+  return true;
+}
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -182,8 +214,10 @@ function renderRow(r) {
     ? `<span class="rating">${r.rating.toFixed(1)} <span class="star">★</span> <span class="muted">(${r.reviewCount ?? 0})</span></span>`
     : '<span class="muted">—</span>';
   const isContacted = contactedSet.has(r.id);
+  const isSaved = savedMap.has(r.id);
   const checked = isContacted ? ' checked' : '';
   const trClass = isContacted ? ' class="contacted"' : '';
+  const saveBtn = `<button type="button" class="save-btn${isSaved ? ' saved' : ''}" data-id="${escapeAttr(r.id)}" aria-label="${isSaved ? 'Unsave' : 'Save'}" title="${isSaved ? 'Unsave' : 'Save for later'}">${isSaved ? '★' : '☆'}</button>`;
   return `
     <tr data-id="${escapeAttr(r.id)}"${trClass}>
       <td class="col-check"><input type="checkbox" class="contacted-checkbox" aria-label="Mark contacted"${checked}></td>
@@ -191,6 +225,7 @@ function renderRow(r) {
       <td class="col-rating">${ratingCell}</td>
       <td>${phoneCell}</td>
       <td>${addressCell}</td>
+      <td class="col-save">${saveBtn}</td>
       <td class="col-verify"><a class="verify-btn" href="${escapeAttr(r.googleMapsUrl)}" target="_blank" rel="noopener">Verify ↗</a></td>
     </tr>
   `;
@@ -199,7 +234,7 @@ function renderRow(r) {
 function renderResults(results) {
   if (results.length === 0) {
     els.resultsBody.innerHTML =
-      '<tr class="empty-row"><td colspan="6">No leads found here. Try a different city or category — OSM coverage varies by region.</td></tr>';
+      '<tr class="empty-row"><td colspan="7">No leads found here. Try a different city or category.</td></tr>';
     return;
   }
   els.resultsBody.innerHTML = results.map(renderRow).join('');
@@ -244,7 +279,14 @@ function applySort(col) {
 async function performSearch(city, categoryKey, { force = false } = {}) {
   setStatus('loading', `${force ? 'Refreshing' : 'Searching for leads in'} ${city}…`);
   els.searchBtn.disabled = true;
-  if (els.refreshBtn) els.refreshBtn.disabled = true;
+  if (els.refreshBtn) {
+    els.refreshBtn.disabled = true;
+    els.refreshBtn.style.display = '';
+  }
+  if (els.showSaved.checked) {
+    els.showSaved.checked = false;
+    searchSnapshot = null;
+  }
   if (!force) els.resultsSection.classList.add('hidden');
 
   try {
@@ -342,6 +384,52 @@ els.resultsBody.addEventListener('change', async (e) => {
   else cb.checked = !cb.checked;
 });
 
+els.resultsBody.addEventListener('click', (e) => {
+  const btn = e.target.closest('.save-btn');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (!id) return;
+  const ok = toggleSaved(id);
+  if (!ok) return;
+  const isSaved = savedMap.has(id);
+  btn.classList.toggle('saved', isSaved);
+  btn.textContent = isSaved ? '★' : '☆';
+  btn.setAttribute('aria-label', isSaved ? 'Unsave' : 'Save');
+  btn.setAttribute('title', isSaved ? 'Unsave' : 'Save for later');
+});
+
+els.showSaved.addEventListener('change', () => {
+  if (els.showSaved.checked) {
+    searchSnapshot = currentMeta
+      ? { results: [...currentResults], meta: { ...currentMeta }, stats: { ...lastStats } }
+      : null;
+    currentResults = [...savedMap.values()];
+    currentMeta = {
+      city: 'Your saved leads',
+      cache: 'stored locally',
+      category: 'all categories',
+    };
+    lastStats = { total: currentResults.length, dropped_has_website: 0, dropped_no_name: 0, dropped_unreachable: 0, dropped_dupe: 0 };
+    if (els.refreshBtn) els.refreshBtn.style.display = 'none';
+    renderSummary(currentMeta, currentResults, lastStats);
+    renderResults(currentResults);
+    els.resultsSection.classList.remove('hidden');
+  } else {
+    if (els.refreshBtn) els.refreshBtn.style.display = '';
+    if (searchSnapshot) {
+      currentResults = searchSnapshot.results;
+      currentMeta = searchSnapshot.meta;
+      lastStats = searchSnapshot.stats;
+      renderSummary(currentMeta, currentResults, lastStats);
+      renderResults(currentResults);
+    } else {
+      currentResults = [];
+      currentMeta = null;
+      els.resultsSection.classList.add('hidden');
+    }
+  }
+});
+
 els.checkAll.addEventListener('change', async () => {
   const checks = [...document.querySelectorAll('.contacted-checkbox')];
   const target = els.checkAll.checked;
@@ -409,6 +497,7 @@ function pitchAll() {
 els.pitchAll?.addEventListener('click', pitchAll);
 
 loadContactedFromStorage();
+loadSavedFromStorage();
 (async () => {
   await checkAuthSilently();
   await loadCategories().catch(err => setStatus('error', err.message));
