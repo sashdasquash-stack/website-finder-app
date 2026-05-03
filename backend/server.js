@@ -6,6 +6,7 @@ const path = require('path');
 const { listCategories, getCategory } = require('./categories');
 const { geocode } = require('./geocode');
 const { searchAndNormalize, SerpApiError } = require('./serpapi');
+const { detectState } = require('./states');
 const cache = require('./cache');
 
 const CONTACTED_FILE = path.join(__dirname, '..', 'data', 'contacted.json');
@@ -80,6 +81,109 @@ app.post('/api/contacted', requireAccess, async (req, res) => {
   res.json({ ok: true });
 });
 
+async function searchOneCity(city, category) {
+  const loc = await geocode(city);
+  const search = await searchAndNormalize({ lat: loc.lat, lon: loc.lon }, category);
+  return { displayName: loc.displayName, ...search };
+}
+
+async function handleCitySearch(city, category) {
+  const cacheKey = cache.buildKey('gmaps', city.trim().toLowerCase(), category.key);
+  const cached = await cache.get(cacheKey);
+  if (cached) {
+    return {
+      results: cached.data.results,
+      stats: cached.data.stats,
+      meta: {
+        city: cached.data.displayCity || city,
+        cache: `cache (${Math.round(cached.ageMs / 1000)}s old)`,
+        category: category.name,
+        source: 'Google Maps (via SerpAPI)',
+      },
+    };
+  }
+  const search = await searchOneCity(city, category);
+  await cache.set(cacheKey, {
+    results: search.results,
+    stats: search.stats,
+    displayCity: search.displayName,
+  });
+  return {
+    results: search.results,
+    stats: search.stats,
+    meta: {
+      city: search.displayName,
+      cache: 'fresh',
+      category: category.name,
+      source: 'Google Maps (via SerpAPI)',
+    },
+  };
+}
+
+async function handleStateSearch(state, category) {
+  const cacheKey = cache.buildKey('gmaps-state', state.abbr, category.key);
+  const cached = await cache.get(cacheKey);
+  if (cached) {
+    return {
+      results: cached.data.results,
+      stats: cached.data.stats,
+      meta: {
+        city: state.name,
+        cache: `cache (${Math.round(cached.ageMs / 1000)}s old)`,
+        category: category.name,
+        source: 'Google Maps (via SerpAPI)',
+        multiCity: true,
+        citiesSearched: cached.data.citiesSearched,
+      },
+    };
+  }
+
+  const allResults = [];
+  const seen = new Set();
+  const totalStats = { total: 0, dropped_has_website: 0, dropped_no_name: 0, dropped_unreachable: 0, dropped_dupe: 0 };
+  const citiesSearched = [];
+
+  for (const cityName of state.cities) {
+    try {
+      const search = await searchOneCity(cityName, category);
+      for (const r of search.results) {
+        if (seen.has(r.id)) {
+          totalStats.dropped_dupe++;
+          continue;
+        }
+        seen.add(r.id);
+        allResults.push(r);
+      }
+      totalStats.total += search.stats.total;
+      totalStats.dropped_has_website += search.stats.dropped_has_website;
+      totalStats.dropped_no_name += search.stats.dropped_no_name;
+      totalStats.dropped_unreachable += search.stats.dropped_unreachable;
+      citiesSearched.push(cityName.split(',')[0].trim());
+    } catch (err) {
+      console.error(`State search: failed for ${cityName}: ${err.message}`);
+    }
+  }
+
+  if (citiesSearched.length === 0) {
+    throw new Error(`Could not find any results in ${state.name}.`);
+  }
+
+  await cache.set(cacheKey, { results: allResults, stats: totalStats, citiesSearched });
+
+  return {
+    results: allResults,
+    stats: totalStats,
+    meta: {
+      city: state.name,
+      cache: 'fresh',
+      category: category.name,
+      source: 'Google Maps (via SerpAPI)',
+      multiCity: true,
+      citiesSearched,
+    },
+  };
+}
+
 app.post('/api/search', requireAccess, async (req, res) => {
   try {
     const { city, category: categoryKey } = req.body || {};
@@ -88,36 +192,12 @@ app.post('/api/search', requireAccess, async (req, res) => {
     }
 
     const category = getCategory(categoryKey);
-    const cacheKey = cache.buildKey('gmaps', city.trim().toLowerCase(), categoryKey);
+    const state = detectState(city);
+    const result = state
+      ? await handleStateSearch(state, category)
+      : await handleCitySearch(city, category);
 
-    let results, stats, cacheStatus, displayCity;
-    const cached = await cache.get(cacheKey);
-    if (cached) {
-      ({ results, stats, displayCity } = cached.data);
-      cacheStatus = `cache (${Math.round(cached.ageMs / 1000)}s old)`;
-    } else {
-      const loc = await geocode(city);
-      displayCity = loc.displayName;
-      const search = await searchAndNormalize(
-        { lat: loc.lat, lon: loc.lon },
-        category
-      );
-      results = search.results;
-      stats = search.stats;
-      await cache.set(cacheKey, { results, stats, displayCity });
-      cacheStatus = 'fresh';
-    }
-
-    res.json({
-      results,
-      stats,
-      meta: {
-        city: displayCity || city,
-        cache: cacheStatus,
-        category: category.name,
-        source: 'Google Maps (via SerpAPI)',
-      },
-    });
+    res.json(result);
   } catch (err) {
     console.error('Search error:', err.message);
     const status = err instanceof SerpApiError ? (err.status || 500) : 500;

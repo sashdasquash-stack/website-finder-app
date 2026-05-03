@@ -166,7 +166,10 @@ function renderSummary(meta, results, stats) {
   const dropped = stats.total - results.length;
   const droppedNote = dropped > 0 ? ` · ${dropped} dropped (had website / unreachable / dupe)` : '';
   const radiusNote = meta.radiusKm ? ` · ${meta.radiusKm}km radius` : '';
-  els.resultsMeta.textContent = `${meta.city}${radiusNote} · ${meta.cache}${droppedNote}`;
+  const cityScope = meta.multiCity && meta.citiesSearched
+    ? `${meta.city} · ${meta.citiesSearched.length} cities (${meta.citiesSearched.join(', ')})`
+    : meta.city;
+  els.resultsMeta.textContent = `${cityScope}${radiusNote} · ${meta.cache}${droppedNote}`;
 }
 
 function applySort(col) {
