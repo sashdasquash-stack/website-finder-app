@@ -173,7 +173,7 @@ function setStatus(type, message) {
 
 function renderRow(r) {
   const phoneCell = r.phone
-    ? `<a href="tel:${escapeAttr(r.phone.replace(/\s+/g, ''))}">${escapeHtml(r.phone)}</a>`
+    ? `<a href="sms:${escapeAttr(r.phone.replace(/\s+/g, ''))}">${escapeHtml(r.phone)}</a>`
     : '<span class="muted">—</span>';
   const addressCell = r.address
     ? `<a href="${escapeAttr(r.googleMapsUrl)}" target="_blank" rel="noopener">${escapeHtml(r.address)}</a>`
