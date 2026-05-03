@@ -64,7 +64,73 @@ h1 {
   line-height: 1.45;
 }
 
+.search-row {
+  display: flex;
+  gap: 1.1rem;
+  align-items: stretch;
+  margin-bottom: 2rem;
+}
+
+.saved-tab {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 1.25rem 1.6rem;
+  min-width: 130px;
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  height: auto;
+  flex-shrink: 0;
+}
+
+.saved-tab:hover:not(:disabled) {
+  background: var(--row-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.saved-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  box-shadow: 0 1px 3px rgba(31, 58, 138, 0.18), 0 4px 12px rgba(31, 58, 138, 0.12);
+}
+
+.saved-tab.active:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: white;
+}
+
+.saved-tab-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+}
+
+.saved-tab-count {
+  font-size: 1.85rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  line-height: 1;
+}
+
 #search-form {
+  flex: 1;
   display: grid;
   grid-template-columns: 2fr 1fr auto;
   gap: 1.25rem;
@@ -74,7 +140,8 @@ h1 {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 2rem;
+  margin-bottom: 0;
+  min-width: 0;
 }
 
 .field {
@@ -252,13 +319,6 @@ button:disabled {
 
 .toggle input { cursor: pointer; }
 .toggle:hover { color: var(--text); }
-
-.saved-count {
-  color: #e8a417;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  margin-left: 0.15rem;
-}
 
 #export-csv,
 .secondary-btn {
@@ -587,11 +647,30 @@ footer p { margin: 0; }
 
   header { margin-bottom: 0.7rem; padding-bottom: 0.6rem; }
 
+  .search-row {
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .saved-tab {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 0.55rem 0.75rem;
+    min-width: 0;
+    font-size: 0.7rem;
+    border-radius: 6px;
+    gap: 0.5rem;
+  }
+
+  .saved-tab-label { font-size: 0.62rem; }
+  .saved-tab-count { font-size: 0.95rem; }
+
   #search-form {
     grid-template-columns: 1fr;
     gap: 0.4rem;
     padding: 0.6rem;
-    margin-bottom: 0.65rem;
+    margin-bottom: 0;
     border-radius: 6px;
   }
 

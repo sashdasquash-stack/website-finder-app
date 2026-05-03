@@ -25,19 +25,26 @@
       <p class="tagline">Local businesses without websites — sourced live from Google Maps.</p>
     </header>
 
-    <form id="search-form" autocomplete="off">
-      <div class="field field-city">
-        <label for="city">City or area</label>
-        <input type="text" id="city" name="city" placeholder="Miami Beach, FL" required>
-      </div>
-      <div class="field field-category">
-        <label for="category">Category</label>
-        <select id="category" name="category" required>
-          <option value="">Loading…</option>
-        </select>
-      </div>
-      <button type="submit" id="search-btn">Search</button>
-    </form>
+    <div class="search-row">
+      <button id="saved-tab" class="saved-tab" type="button" aria-pressed="false" title="Toggle to view your saved leads">
+        <span class="saved-tab-label">Saved</span>
+        <span class="saved-tab-count" id="saved-count">0</span>
+      </button>
+
+      <form id="search-form" autocomplete="off">
+        <div class="field field-city">
+          <label for="city">City or area</label>
+          <input type="text" id="city" name="city" placeholder="Miami Beach, FL" required>
+        </div>
+        <div class="field field-category">
+          <label for="category">Category</label>
+          <select id="category" name="category" required>
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <button type="submit" id="search-btn">Search</button>
+      </form>
+    </div>
 
     <section id="status" class="status hidden" aria-live="polite"></section>
 
@@ -51,10 +58,6 @@
           </p>
         </div>
         <div class="results-actions">
-          <label class="toggle">
-            <input type="checkbox" id="show-saved">
-            <span>Saved only <span id="saved-count" class="saved-count"></span></span>
-          </label>
           <label class="toggle">
             <input type="checkbox" id="hide-contacted">
             <span>Hide contacted</span>

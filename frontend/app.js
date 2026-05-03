@@ -14,7 +14,7 @@ const els = {
   exportBtn: document.getElementById('export-csv'),
   checkAll: document.getElementById('check-all'),
   hideContacted: document.getElementById('hide-contacted'),
-  showSaved: document.getElementById('show-saved'),
+  savedTab: document.getElementById('saved-tab'),
   savedCount: document.getElementById('saved-count'),
   resetSaved: document.getElementById('reset-saved'),
   pitchAll: document.getElementById('pitch-all'),
@@ -161,7 +161,48 @@ function saveSavedToStorage() {
 
 function updateSavedCount() {
   if (els.savedCount) {
-    els.savedCount.textContent = savedMap.size > 0 ? `(${savedMap.size})` : '';
+    els.savedCount.textContent = savedMap.size.toLocaleString();
+  }
+}
+
+function isSavedMode() {
+  return document.body.classList.contains('saved-mode');
+}
+
+function setSavedMode(active) {
+  document.body.classList.toggle('saved-mode', active);
+  if (els.savedTab) {
+    els.savedTab.classList.toggle('active', active);
+    els.savedTab.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+  if (active) {
+    searchSnapshot = currentMeta
+      ? { results: [...currentResults], meta: { ...currentMeta }, stats: { ...lastStats } }
+      : null;
+    currentResults = [...savedMap.values()];
+    currentMeta = {
+      city: 'Your saved leads',
+      cache: 'stored locally',
+      category: 'all categories',
+    };
+    lastStats = { total: currentResults.length, dropped_has_website: 0, dropped_no_name: 0, dropped_unreachable: 0, dropped_dupe: 0 };
+    if (els.refreshBtn) els.refreshBtn.style.display = 'none';
+    renderSummary(currentMeta, currentResults, lastStats);
+    renderResults(currentResults);
+    els.resultsSection.classList.remove('hidden');
+  } else {
+    if (els.refreshBtn) els.refreshBtn.style.display = '';
+    if (searchSnapshot) {
+      currentResults = searchSnapshot.results;
+      currentMeta = searchSnapshot.meta;
+      lastStats = searchSnapshot.stats;
+      renderSummary(currentMeta, currentResults, lastStats);
+      renderResults(currentResults);
+    } else {
+      currentResults = [];
+      currentMeta = null;
+      els.resultsSection.classList.add('hidden');
+    }
   }
 }
 
@@ -299,9 +340,8 @@ async function performSearch(city, categoryKey, { force = false } = {}) {
     els.refreshBtn.disabled = true;
     els.refreshBtn.style.display = '';
   }
-  if (els.showSaved.checked) {
-    els.showSaved.checked = false;
-    document.body.classList.remove('saved-mode');
+  if (isSavedMode()) {
+    setSavedMode(false);
     searchSnapshot = null;
   }
   if (!force) els.resultsSection.classList.add('hidden');
@@ -423,37 +463,8 @@ els.resultsBody.addEventListener('click', (e) => {
   btn.setAttribute('title', isSaved ? 'Unsave' : 'Save for later');
 });
 
-els.showSaved.addEventListener('change', () => {
-  document.body.classList.toggle('saved-mode', els.showSaved.checked);
-  if (els.showSaved.checked) {
-    searchSnapshot = currentMeta
-      ? { results: [...currentResults], meta: { ...currentMeta }, stats: { ...lastStats } }
-      : null;
-    currentResults = [...savedMap.values()];
-    currentMeta = {
-      city: 'Your saved leads',
-      cache: 'stored locally',
-      category: 'all categories',
-    };
-    lastStats = { total: currentResults.length, dropped_has_website: 0, dropped_no_name: 0, dropped_unreachable: 0, dropped_dupe: 0 };
-    if (els.refreshBtn) els.refreshBtn.style.display = 'none';
-    renderSummary(currentMeta, currentResults, lastStats);
-    renderResults(currentResults);
-    els.resultsSection.classList.remove('hidden');
-  } else {
-    if (els.refreshBtn) els.refreshBtn.style.display = '';
-    if (searchSnapshot) {
-      currentResults = searchSnapshot.results;
-      currentMeta = searchSnapshot.meta;
-      lastStats = searchSnapshot.stats;
-      renderSummary(currentMeta, currentResults, lastStats);
-      renderResults(currentResults);
-    } else {
-      currentResults = [];
-      currentMeta = null;
-      els.resultsSection.classList.add('hidden');
-    }
-  }
+els.savedTab?.addEventListener('click', () => {
+  setSavedMode(!isSavedMode());
 });
 
 els.resetSaved?.addEventListener('click', () => {
@@ -467,7 +478,7 @@ els.resetSaved?.addEventListener('click', () => {
   if (!ok) return;
   savedMap.clear();
   saveSavedToStorage();
-  if (els.showSaved.checked) {
+  if (isSavedMode()) {
     currentResults = [];
     lastStats = { total: 0, dropped_has_website: 0, dropped_no_name: 0, dropped_unreachable: 0, dropped_dupe: 0 };
     renderSummary(currentMeta, currentResults, lastStats);
