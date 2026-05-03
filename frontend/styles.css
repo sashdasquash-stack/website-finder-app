@@ -79,39 +79,19 @@ h1 {
   gap: 0.45rem;
   padding: 1.25rem 1.6rem;
   min-width: 130px;
-  background: var(--surface);
-  color: var(--text-muted);
-  border: 1px solid var(--border);
+  background: var(--accent);
+  color: white;
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 3px rgba(31, 58, 138, 0.18), 0 4px 12px rgba(31, 58, 138, 0.12);
   font-family: inherit;
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   height: auto;
   flex-shrink: 0;
-}
-
-.saved-tab:hover:not(:disabled) {
-  background: var(--row-hover);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-
-.saved-tab.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-  box-shadow: 0 1px 3px rgba(31, 58, 138, 0.18), 0 4px 12px rgba(31, 58, 138, 0.12);
-}
-
-.saved-tab.active:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: white;
+  user-select: none;
 }
 
 .saved-tab-label {
