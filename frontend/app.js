@@ -15,6 +15,7 @@ const els = {
   checkAll: document.getElementById('check-all'),
   hideContacted: document.getElementById('hide-contacted'),
   showSaved: document.getElementById('show-saved'),
+  savedCount: document.getElementById('saved-count'),
   pitchAll: document.getElementById('pitch-all'),
   lock: document.getElementById('lock'),
   lockForm: document.getElementById('lock-form'),
@@ -154,6 +155,13 @@ function loadSavedFromStorage() {
 
 function saveSavedToStorage() {
   localStorage.setItem(SAVED_KEY, JSON.stringify([...savedMap.values()]));
+  updateSavedCount();
+}
+
+function updateSavedCount() {
+  if (els.savedCount) {
+    els.savedCount.textContent = savedMap.size > 0 ? `(${savedMap.size})` : '';
+  }
 }
 
 function toggleSaved(id) {
@@ -302,6 +310,14 @@ async function performSearch(city, categoryKey, { force = false } = {}) {
     currentMeta = data.meta;
     lastStats = data.stats;
     currentSort = { col: null, dir: 'asc' };
+
+    let newlySaved = 0;
+    for (const r of data.results) {
+      if (!savedMap.has(r.id)) newlySaved++;
+      savedMap.set(r.id, r);
+    }
+    if (newlySaved > 0) saveSavedToStorage();
+    currentMeta.newlySaved = newlySaved;
     document.querySelectorAll('th[data-sort]').forEach(th => {
       th.classList.remove('sorted-asc', 'sorted-desc');
     });
@@ -498,6 +514,7 @@ els.pitchAll?.addEventListener('click', pitchAll);
 
 loadContactedFromStorage();
 loadSavedFromStorage();
+updateSavedCount();
 (async () => {
   await checkAuthSilently();
   await loadCategories().catch(err => setStatus('error', err.message));

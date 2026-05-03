@@ -253,6 +253,13 @@ button:disabled {
 .toggle input { cursor: pointer; }
 .toggle:hover { color: var(--text); }
 
+.saved-count {
+  color: #e8a417;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin-left: 0.15rem;
+}
+
 #export-csv,
 .secondary-btn {
   background: white;
