@@ -1,36 +1,12 @@
 require('dotenv').config({ quiet: true });
 
 const express = require('express');
-const fs = require('fs').promises;
 const path = require('path');
 const { listCategories, getCategory } = require('./categories');
 const { geocode } = require('./geocode');
-const { searchAndNormalize, SerpApiError } = require('./serpapi');
+const { searchAndNormalize, validateApiKey, SerpApiError } = require('./serpapi');
 const { detectState } = require('./states');
 const cache = require('./cache');
-
-const CONTACTED_FILE = path.join(__dirname, '..', 'data', 'contacted.json');
-let contactedCache = null;
-
-async function loadContacted() {
-  try {
-    const raw = await fs.readFile(CONTACTED_FILE, 'utf8');
-    return new Set(JSON.parse(raw));
-  } catch (err) {
-    if (err.code === 'ENOENT') return new Set();
-    throw err;
-  }
-}
-
-async function getContacted() {
-  if (!contactedCache) contactedCache = await loadContacted();
-  return contactedCache;
-}
-
-async function saveContacted(set) {
-  await fs.mkdir(path.dirname(CONTACTED_FILE), { recursive: true });
-  await fs.writeFile(CONTACTED_FILE, JSON.stringify([...set]));
-}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,56 +14,46 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
-const ACCESS_PASSWORD = process.env.LEAD_FINDER_PASSWORD;
-
-function requireAccess(req, res, next) {
-  if (!ACCESS_PASSWORD) return next();
-  const provided = req.headers['x-access-password'];
-  if (provided !== ACCESS_PASSWORD) {
-    return res.status(401).json({ error: 'Invalid or missing access password.' });
-  }
-  next();
-}
-
-app.get('/api/auth', requireAccess, (req, res) => {
-  res.json({ ok: true });
-});
-
 app.get('/api/health', (req, res) => {
-  res.json({
-    ok: true,
-    apiKeyConfigured: Boolean(process.env.SERPAPI_API_KEY),
-  });
+  res.json({ ok: true });
 });
 
 app.get('/api/categories', (req, res) => {
   res.json({ categories: listCategories() });
 });
 
-app.get('/api/contacted', requireAccess, async (req, res) => {
-  const set = await getContacted();
-  res.json({ ids: [...set] });
-});
-
-app.post('/api/contacted', requireAccess, async (req, res) => {
-  const { id, contacted } = req.body || {};
-  if (typeof id !== 'string' || !id || typeof contacted !== 'boolean') {
-    return res.status(400).json({ error: 'Body must be { id: string, contacted: bool }.' });
+function requireSerpKey(req, res, next) {
+  const key = req.headers['x-serpapi-key'];
+  if (!key || typeof key !== 'string' || key.length < 10) {
+    return res.status(401).json({ error: 'Missing or invalid SerpAPI key.' });
   }
-  const set = await getContacted();
-  if (contacted) set.add(id);
-  else set.delete(id);
-  await saveContacted(set);
-  res.json({ ok: true });
+  req.serpApiKey = key;
+  next();
+}
+
+app.get('/api/validate-key', async (req, res) => {
+  const key = req.headers['x-serpapi-key'];
+  if (!key) {
+    return res.status(400).json({ valid: false, error: 'No key provided.' });
+  }
+  try {
+    const result = await validateApiKey(key);
+    if (!result.valid) {
+      return res.status(401).json({ valid: false, error: 'Invalid SerpAPI key.' });
+    }
+    res.json({ valid: true });
+  } catch (err) {
+    res.status(500).json({ valid: false, error: err.message });
+  }
 });
 
-async function searchOneCity(city, category) {
+async function searchOneCity(apiKey, city, category) {
   const loc = await geocode(city);
-  const search = await searchAndNormalize({ lat: loc.lat, lon: loc.lon }, category);
+  const search = await searchAndNormalize({ apiKey, lat: loc.lat, lon: loc.lon }, category);
   return { displayName: loc.displayName, ...search };
 }
 
-async function handleCitySearch(city, category) {
+async function handleCitySearch(apiKey, city, category) {
   const cacheKey = cache.buildKey('gmaps', city.trim().toLowerCase(), category.key);
   const cached = await cache.get(cacheKey);
   if (cached) {
@@ -102,7 +68,7 @@ async function handleCitySearch(city, category) {
       },
     };
   }
-  const search = await searchOneCity(city, category);
+  const search = await searchOneCity(apiKey, city, category);
   await cache.set(cacheKey, {
     results: search.results,
     stats: search.stats,
@@ -120,7 +86,7 @@ async function handleCitySearch(city, category) {
   };
 }
 
-async function handleStateSearch(state, category) {
+async function handleStateSearch(apiKey, state, category) {
   const cacheKey = cache.buildKey('gmaps-state', state.abbr, category.key);
   const cached = await cache.get(cacheKey);
   if (cached) {
@@ -145,7 +111,7 @@ async function handleStateSearch(state, category) {
 
   for (const cityName of state.cities) {
     try {
-      const search = await searchOneCity(cityName, category);
+      const search = await searchOneCity(apiKey, cityName, category);
       for (const r of search.results) {
         if (seen.has(r.id)) {
           totalStats.dropped_dupe++;
@@ -184,7 +150,7 @@ async function handleStateSearch(state, category) {
   };
 }
 
-app.post('/api/search', requireAccess, async (req, res) => {
+app.post('/api/search', requireSerpKey, async (req, res) => {
   try {
     const { city, category: categoryKey } = req.body || {};
     if (!city || !categoryKey) {
@@ -194,8 +160,8 @@ app.post('/api/search', requireAccess, async (req, res) => {
     const category = getCategory(categoryKey);
     const state = detectState(city);
     const result = state
-      ? await handleStateSearch(state, category)
-      : await handleCitySearch(city, category);
+      ? await handleStateSearch(req.serpApiKey, state, category)
+      : await handleCitySearch(req.serpApiKey, city, category);
 
     res.json(result);
   } catch (err) {
@@ -207,8 +173,5 @@ app.post('/api/search', requireAccess, async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Lead Finder running at http://localhost:${PORT}`);
-  if (!process.env.SERPAPI_API_KEY) {
-    console.warn('\n⚠  SERPAPI_API_KEY is not set.');
-    console.warn('   Searches will fail until you add a key to .env (see .env.example).\n');
-  }
+  console.log('Bring-your-own-key mode: every visitor enters their own SerpAPI key.');
 });

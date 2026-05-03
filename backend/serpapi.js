@@ -1,4 +1,5 @@
 const SERPAPI_BASE = 'https://serpapi.com/search.json';
+const SERPAPI_ACCOUNT = 'https://serpapi.com/account';
 
 class SerpApiError extends Error {
   constructor(message, status) {
@@ -7,19 +8,26 @@ class SerpApiError extends Error {
   }
 }
 
-function getApiKey() {
-  const key = process.env.SERPAPI_API_KEY;
-  if (!key) {
-    throw new SerpApiError(
-      'SERPAPI_API_KEY is not set. Sign up free at https://serpapi.com (100 searches/month, no credit card), get your key from the dashboard, and add it to .env.',
-      500
-    );
+async function validateApiKey(apiKey) {
+  if (!apiKey || typeof apiKey !== 'string') return { valid: false };
+  try {
+    const res = await fetch(`${SERPAPI_ACCOUNT}?api_key=${encodeURIComponent(apiKey)}`);
+    if (res.status === 401) return { valid: false };
+    if (!res.ok) {
+      throw new SerpApiError(`SerpAPI returned ${res.status} during validation`, res.status);
+    }
+    return { valid: true };
+  } catch (err) {
+    if (err instanceof SerpApiError) throw err;
+    throw new SerpApiError(`Could not reach SerpAPI: ${err.message}`, 0);
   }
-  return key;
 }
 
-async function fetchAll({ lat, lon, query, zoom = 12, maxPages = 3 }) {
-  const apiKey = getApiKey();
+async function fetchAll({ apiKey, lat, lon, query, zoom = 12, maxPages = 3 }) {
+  if (!apiKey) {
+    throw new SerpApiError('No SerpAPI key provided.', 401);
+  }
+
   const all = [];
   let start = 0;
 
@@ -41,10 +49,10 @@ async function fetchAll({ lat, lon, query, zoom = 12, maxPages = 3 }) {
     }
 
     if (res.status === 401) {
-      throw new SerpApiError('SerpAPI key invalid or unauthorized. Check SERPAPI_API_KEY in your .env.', 401);
+      throw new SerpApiError('Your SerpAPI key is invalid. Update it in your account.', 401);
     }
     if (res.status === 429) {
-      throw new SerpApiError('SerpAPI rate/quota limit reached. Free tier is 100 searches/month — check your dashboard.', 429);
+      throw new SerpApiError('SerpAPI rate/quota limit reached for your account. Free tier is 100 searches/month.', 429);
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -138,13 +146,13 @@ function normalize(places, categoryName) {
   return { results, stats };
 }
 
-async function searchAndNormalize({ lat, lon }, category) {
+async function searchAndNormalize({ apiKey, lat, lon }, category) {
   const query = category.serpQuery || category.name.toLowerCase();
-  const places = await fetchAll({ lat, lon, query });
+  const places = await fetchAll({ apiKey, lat, lon, query });
   return { places, ...normalize(places, category.name) };
 }
 
-module.exports = { fetchAll, normalize, searchAndNormalize, SerpApiError };
+module.exports = { fetchAll, normalize, searchAndNormalize, validateApiKey, SerpApiError };
 
 if (require.main === module) {
   require('dotenv').config({ quiet: true });
@@ -152,6 +160,11 @@ if (require.main === module) {
   const { geocode } = require('./geocode');
 
   (async () => {
+    const apiKey = process.env.SERPAPI_API_KEY;
+    if (!apiKey) {
+      console.error('Set SERPAPI_API_KEY in .env for the standalone test.');
+      process.exit(1);
+    }
     const city = process.argv[2] || 'Miami Beach, FL';
     const categoryKey = process.argv[3] || 'plumbers';
     const category = getCategory(categoryKey);
@@ -160,17 +173,16 @@ if (require.main === module) {
     console.log(`Geocoded ${city} → ${loc.lat}, ${loc.lon}`);
 
     const { places, results, stats } = await searchAndNormalize(
-      { lat: loc.lat, lon: loc.lon },
+      { apiKey, lat: loc.lat, lon: loc.lon },
       category
     );
 
     console.log(`\nGoogle Maps returned: ${places.length}`);
     console.log('Filter stats:', stats);
     console.log(`\nKept: ${results.length}`);
-    for (const r of results.slice(0, 10)) {
+    for (const r of results.slice(0, 5)) {
       console.log(`\n  ${r.name} ${r.rating ? `(${r.rating}★, ${r.reviewCount} reviews)` : ''}`);
       console.log(`    phone:   ${r.phone || '(none)'}`);
-      console.log(`    address: ${r.address || '(none)'}`);
     }
   })().catch(err => {
     console.error('Error:', err.message);

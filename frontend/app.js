@@ -18,17 +18,19 @@ const els = {
   lockError: document.getElementById('lock-error'),
 };
 
-const PW_KEY = 'lead_finder_pw';
+const SERP_KEY = 'lead_finder_serpapi_key';
+const CONTACTED_KEY = 'lead_finder_contacted';
 
-function getPassword() { return localStorage.getItem(PW_KEY) || ''; }
-function setPassword(pw) { localStorage.setItem(PW_KEY, pw); }
-function clearPassword() { localStorage.removeItem(PW_KEY); }
+function getSerpKey() { return localStorage.getItem(SERP_KEY) || ''; }
+function setSerpKey(k) { localStorage.setItem(SERP_KEY, k); }
+function clearSerpKey() { localStorage.removeItem(SERP_KEY); }
 
 async function authFetch(url, options = {}) {
-  const headers = { ...(options.headers || {}), 'x-access-password': getPassword() };
+  const headers = { ...(options.headers || {}), 'x-serpapi-key': getSerpKey() };
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
-    showLock();
+    clearSerpKey();
+    showLock('Your SerpAPI key was rejected. Paste it again.');
     throw new Error('Authentication required');
   }
   return res;
@@ -54,10 +56,16 @@ function hideLock() {
 }
 
 async function checkAuthSilently() {
+  const stored = getSerpKey();
+  if (!stored) {
+    showLock();
+    return false;
+  }
   try {
-    const res = await fetch('/api/auth', { headers: { 'x-access-password': getPassword() } });
+    const res = await fetch('/api/validate-key', { headers: { 'x-serpapi-key': stored } });
     if (res.status === 401) {
-      showLock();
+      clearSerpKey();
+      showLock('Your saved key is no longer valid. Paste a new one.');
       return false;
     }
     hideLock();
@@ -69,19 +77,32 @@ async function checkAuthSilently() {
 
 els.lockForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const pw = els.lockInput.value;
-  const res = await fetch('/api/auth', { headers: { 'x-access-password': pw } });
-  if (res.status === 401) {
-    showLock('Wrong password.');
-    return;
+  const key = els.lockInput.value.trim();
+  if (!key) return;
+
+  els.lockError.classList.add('hidden');
+  const submitBtn = els.lockForm.querySelector('button');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Checking…';
+
+  try {
+    const res = await fetch('/api/validate-key', { headers: { 'x-serpapi-key': key } });
+    if (res.status === 401) {
+      showLock("That key isn't valid. Double-check it at serpapi.com/dashboard.");
+      return;
+    }
+    if (!res.ok) {
+      showLock(`Could not validate key (HTTP ${res.status}). Try again.`);
+      return;
+    }
+    setSerpKey(key);
+    hideLock();
+  } catch (err) {
+    showLock(`Could not reach the server: ${err.message}`);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Continue';
   }
-  if (!res.ok) {
-    showLock(`Server error (${res.status}).`);
-    return;
-  }
-  setPassword(pw);
-  hideLock();
-  loadContacted();
 });
 
 let currentResults = [];
@@ -256,35 +277,24 @@ document.querySelectorAll('th[data-sort]').forEach(th => {
   th.addEventListener('click', () => applySort(th.dataset.sort));
 });
 
-async function loadContacted() {
+function loadContactedFromStorage() {
+  contactedSet.clear();
   try {
-    const res = await authFetch('/api/contacted');
-    if (!res.ok) return;
-    const { ids } = await res.json();
-    contactedSet.clear();
+    const ids = JSON.parse(localStorage.getItem(CONTACTED_KEY) || '[]');
     for (const id of ids) contactedSet.add(id);
   } catch {
-    // Non-fatal; contacted state just won't load
+    // ignore corrupted storage
   }
 }
 
-async function toggleContacted(id, contacted) {
+function saveContactedToStorage() {
+  localStorage.setItem(CONTACTED_KEY, JSON.stringify([...contactedSet]));
+}
+
+function toggleContacted(id, contacted) {
   if (contacted) contactedSet.add(id);
   else contactedSet.delete(id);
-  try {
-    const res = await authFetch('/api/contacted', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, contacted }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  } catch (err) {
-    // Roll back on failure
-    if (contacted) contactedSet.delete(id);
-    else contactedSet.add(id);
-    setStatus('error', `Could not save contacted state: ${err.message}`);
-    return false;
-  }
+  saveContactedToStorage();
   if (currentMeta) {
     renderSummary(currentMeta, currentResults, lastStats);
   }
@@ -332,10 +342,8 @@ els.form.addEventListener('submit', e => {
 
 els.exportBtn.addEventListener('click', exportCSV);
 
+loadContactedFromStorage();
 (async () => {
   await checkAuthSilently();
-  await Promise.all([
-    loadCategories().catch(err => setStatus('error', err.message)),
-    loadContacted(),
-  ]);
+  await loadCategories().catch(err => setStatus('error', err.message));
 })();

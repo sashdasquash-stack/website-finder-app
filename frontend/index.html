@@ -10,10 +10,11 @@
   <div id="lock" class="lock hidden" aria-hidden="true">
     <div class="lock-card">
       <h2>Lead Finder</h2>
-      <p>This site is private. Enter the access password to continue.</p>
+      <p class="lock-intro">Bring your own SerpAPI key — searches use your account, not anyone else's.</p>
+      <p class="lock-help">No key yet? <a href="https://serpapi.com/users/sign_up" target="_blank" rel="noopener">Get one free</a> — 100 searches/month, no credit card needed.</p>
       <form id="lock-form" autocomplete="off">
-        <input type="password" id="lock-input" placeholder="Password" autocomplete="current-password" required>
-        <button type="submit">Unlock</button>
+        <input type="password" id="lock-input" placeholder="Paste your SerpAPI key" autocomplete="off" required>
+        <button type="submit">Continue</button>
       </form>
       <p id="lock-error" class="lock-error hidden"></p>
     </div>
