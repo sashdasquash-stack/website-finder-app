@@ -16,6 +16,7 @@ const els = {
   hideContacted: document.getElementById('hide-contacted'),
   showSaved: document.getElementById('show-saved'),
   savedCount: document.getElementById('saved-count'),
+  resetSaved: document.getElementById('reset-saved'),
   pitchAll: document.getElementById('pitch-all'),
   lock: document.getElementById('lock'),
   lockForm: document.getElementById('lock-form'),
@@ -293,6 +294,7 @@ async function performSearch(city, categoryKey, { force = false } = {}) {
   }
   if (els.showSaved.checked) {
     els.showSaved.checked = false;
+    document.body.classList.remove('saved-mode');
     searchSnapshot = null;
   }
   if (!force) els.resultsSection.classList.add('hidden');
@@ -415,6 +417,7 @@ els.resultsBody.addEventListener('click', (e) => {
 });
 
 els.showSaved.addEventListener('change', () => {
+  document.body.classList.toggle('saved-mode', els.showSaved.checked);
   if (els.showSaved.checked) {
     searchSnapshot = currentMeta
       ? { results: [...currentResults], meta: { ...currentMeta }, stats: { ...lastStats } }
@@ -443,6 +446,32 @@ els.showSaved.addEventListener('change', () => {
       currentMeta = null;
       els.resultsSection.classList.add('hidden');
     }
+  }
+});
+
+els.resetSaved?.addEventListener('click', () => {
+  if (savedMap.size === 0) {
+    setStatus('error', 'Nothing to reset — your saved list is already empty.');
+    return;
+  }
+  const ok = confirm(
+    `Permanently delete all ${savedMap.size} saved lead${savedMap.size === 1 ? '' : 's'}?\n\nThis only clears your local saved list. Your contacted marks stay.`
+  );
+  if (!ok) return;
+  savedMap.clear();
+  saveSavedToStorage();
+  if (els.showSaved.checked) {
+    currentResults = [];
+    lastStats = { total: 0, dropped_has_website: 0, dropped_no_name: 0, dropped_unreachable: 0, dropped_dupe: 0 };
+    renderSummary(currentMeta, currentResults, lastStats);
+    renderResults(currentResults);
+  } else {
+    document.querySelectorAll('.save-btn.saved').forEach(btn => {
+      btn.classList.remove('saved');
+      btn.textContent = '☆';
+      btn.setAttribute('aria-label', 'Save');
+      btn.setAttribute('title', 'Save for later');
+    });
   }
 });
 

@@ -280,6 +280,19 @@ button:disabled {
 .owner-only { display: none; }
 body.is-owner .owner-only { display: inline-flex; }
 
+.saved-mode-only { display: none; }
+body.saved-mode .saved-mode-only { display: inline-flex; }
+
+.danger-btn {
+  color: #b91c1c !important;
+  border-color: #fecaca !important;
+}
+
+.danger-btn:hover:not(:disabled) {
+  background: #fef2f2 !important;
+  border-color: #b91c1c !important;
+}
+
 .table-wrap {
   background: white;
   border: 1px solid var(--border);
