@@ -12,6 +12,7 @@ const els = {
   exportBtn: document.getElementById('export-csv'),
   checkAll: document.getElementById('check-all'),
   hideContacted: document.getElementById('hide-contacted'),
+  pitchAll: document.getElementById('pitch-all'),
   lock: document.getElementById('lock'),
   lockForm: document.getElementById('lock-form'),
   lockInput: document.getElementById('lock-input'),
@@ -20,6 +21,27 @@ const els = {
 
 const SERP_KEY = 'lead_finder_serpapi_key';
 const CONTACTED_KEY = 'lead_finder_contacted';
+const OWNER_HASH = '9c6a0aebb2cc42f62ac1c364eef957d42c295ffd2417ec58cc9204d2655c9925';
+const PITCH_MESSAGE = "hey! i saw you guys dont have a website! im a pro builder, and im willing to help. reach out to me for more info!";
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function checkOwner() {
+  const key = getSerpKey();
+  if (!key) {
+    document.body.classList.remove('is-owner');
+    return;
+  }
+  try {
+    const hash = await sha256(key);
+    document.body.classList.toggle('is-owner', hash === OWNER_HASH);
+  } catch {
+    document.body.classList.remove('is-owner');
+  }
+}
 
 function getSerpKey() { return localStorage.getItem(SERP_KEY) || ''; }
 function setSerpKey(k) { localStorage.setItem(SERP_KEY, k); }
@@ -69,6 +91,7 @@ async function checkAuthSilently() {
       return false;
     }
     hideLock();
+    await checkOwner();
     return true;
   } catch {
     return false;
@@ -97,6 +120,7 @@ els.lockForm.addEventListener('submit', async (e) => {
     }
     setSerpKey(key);
     hideLock();
+    await checkOwner();
   } catch (err) {
     showLock(`Could not reach the server: ${err.message}`);
   } finally {
@@ -341,6 +365,35 @@ els.form.addEventListener('submit', e => {
 });
 
 els.exportBtn.addEventListener('click', exportCSV);
+
+function pitchAll() {
+  if (!document.body.classList.contains('is-owner')) return;
+  const pool = els.hideContacted.checked
+    ? currentResults.filter(r => !contactedSet.has(r.id))
+    : currentResults;
+  const phones = pool
+    .filter(r => r.phone)
+    .map(r => r.phone.replace(/[^\d+]/g, ''))
+    .filter(Boolean);
+
+  if (phones.length === 0) {
+    setStatus('error', 'No phone numbers in the current results to text.');
+    return;
+  }
+
+  const ok = confirm(
+    `Open your phone's SMS app with ${phones.length} recipient${phones.length === 1 ? '' : 's'} pre-loaded?\n\n` +
+    `You'll still need to tap Send. Note: cold-pitch SMS to businesses can run afoul of TCPA — proceed at your own risk.`
+  );
+  if (!ok) return;
+
+  const recipients = phones.join(',');
+  const body = encodeURIComponent(PITCH_MESSAGE);
+  const smsUrl = `sms:${recipients}?&body=${body}`;
+  window.location.href = smsUrl;
+}
+
+els.pitchAll?.addEventListener('click', pitchAll);
 
 loadContactedFromStorage();
 (async () => {
